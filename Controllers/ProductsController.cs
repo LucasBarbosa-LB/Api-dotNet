@@ -1,4 +1,5 @@
 ﻿using Api.Models;
+using HPlusSport.API.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,9 +18,55 @@ namespace Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult> GetAllProducts()
+        public async Task<ActionResult> GetAllProducts([FromQuery] ProductsQueryParameters queryParameters)
         {
-            return Ok( await _context.Products.ToArrayAsync());
+            IQueryable<Product> products = _context.Products;
+            if (queryParameters.MinPrice != null)
+            {
+                products = products.Where(
+                    p => p.Price >= queryParameters.MinPrice.Value
+                );
+            }
+            if (queryParameters.MaxPrice != null)
+            {
+                products = products.Where(
+                    p => p.Price <= queryParameters.MaxPrice.Value
+                );
+            }
+
+            if (!string.IsNullOrEmpty(queryParameters.SearchTerms))
+            {
+                products = products.Where(
+                    p =>
+                    p.Sku.ToLower().Contains(queryParameters.SearchTerms.ToLower()) ||
+                    p.Sku.ToLower().Contains(queryParameters.SearchTerms.ToLower())
+                );
+            }
+            if (!string.IsNullOrEmpty(queryParameters.Sku))
+            {
+                products = products.Where(
+                    p => p.Sku.ToLower().Contains(queryParameters.Sku.ToLower())
+                );
+            }
+            if (!string.IsNullOrEmpty(queryParameters.Name))
+            {
+                products = products.Where(
+                    p => p.Name.ToLower().Contains(queryParameters.Name.ToLower())
+                );
+            }
+            if (!string.IsNullOrEmpty(queryParameters.SortBy))
+            {
+                if (typeof(Product).GetProperty(queryParameters.SortBy) != null)
+                {
+                    products = products.OrderByCustom(
+                        queryParameters.SortBy,
+                        queryParameters.SortOrder);
+                }
+            }
+
+
+            products = products.Skip(queryParameters.Size * (queryParameters.Page - 1)).Take(queryParameters.Size);
+            return Ok(await products.ToArrayAsync());
         }
         [HttpGet("{id}")]
 
@@ -48,7 +95,7 @@ namespace Api.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult> PutProduct(int id, Product product)
         {
-            if(id != product.Id)
+            if (id != product.Id)
             {
                 return BadRequest();
             }
@@ -57,9 +104,9 @@ namespace Api.Controllers
             {
                 await _context.SaveChangesAsync();
             }
-            catch(DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException)
             {
-                if(!_context.Products.Any(p=> p.Id == id))
+                if (!_context.Products.Any(p => p.Id == id))
                 {
                     return NotFound();
                 }
@@ -86,10 +133,10 @@ namespace Api.Controllers
 
         [HttpPost]
         [Route("Delete")]
-        public async Task<ActionResult> DeleteMultProduct([FromQuery]int[] ids)
+        public async Task<ActionResult> DeleteMultProduct([FromQuery] int[] ids)
         {
             var products = new List<Product>();
-            foreach(var id in ids)
+            foreach (var id in ids)
             {
                 var product = await _context.Products.FindAsync(id);
                 if (product == null) { return NotFound(); }
